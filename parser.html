@@ -1,0 +1,77 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+    <title>Iscra ajax interface</title>
+    <meta http-equiv="content-type" content="text/html;charset=utf-8" />
+    <script type="text/javascript" src="jquery.js"></script>
+    <style type="text/css">
+        #main {
+            text-align: center;
+            margin: 0 auto 0 auto;
+        }
+    </style>
+    <script type="text/javascript">
+        var isActive = false;
+        function iscraRunOnce()
+        {
+                $.get("parser.php", function (data) {
+                    if (data == "END")
+                    {
+                        $("#iscraOut").html("FINISHED");
+                        $("#iscraStop").click();
+                    }
+                    else
+                    {
+                        var stat = data.split(";")
+                        if (stat.length == 2)
+                            $("#iscraOut").html("Page " + stat[0] + " of " + stat[1]);
+                        else
+                            $("#iscraOut").html(data);
+                        if (isActive)
+                            iscraRunOnce();
+                    }
+                });
+        }
+        function iscraReset()
+        {
+                $.get("parser.php",
+                    {reset: true},
+                    function (data) {
+                        $("#iscraOut").html(data);
+                    }
+                );
+        }
+        $(document).ready(function () {
+            $("#iscraStop").attr("disabled", "true");
+            $("#iscraStart").click(function () {
+                $(this).attr("disabled", "true");
+                $("#iscraStop").removeAttr("disabled");
+                isActive = true;
+                iscraRunOnce();
+            });
+            $("#iscraStop").click(function () {
+                isActive = false;
+                $(this).attr("disabled", "true");
+                $("#iscraStart").removeAttr("disabled");
+            });
+            $("#iscraReset").click(function () {
+                $("#iscraStop").click();
+                iscraReset();
+            });
+        });
+    </script>
+</head>
+
+<body>
+
+    <div id="main">
+        <div id="iscraOut">status</div>
+        <input id="iscraStart" type="button" value="start" />
+        <input id="iscraStop" type="button" value="stop" />
+        <input id="iscraReset" type="button" value="reset" />
+    </div>
+
+</body>
+</html>
