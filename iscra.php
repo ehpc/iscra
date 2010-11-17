@@ -9,6 +9,9 @@
 
 error_reporting(E_ALL);
 
+// Functions split_url, join_url and url_remove_dot_segments are taken from:
+// http://nadeausoftware.com/articles/2008/05/php_tip_how_parse_and_build_urls
+//
 function split_url( $url, $decode=TRUE )
 {
     $xunressub     = 'a-zA-Z\d\-._~\!$&\'()*+,;=';
@@ -171,18 +174,18 @@ function url_remove_dot_segments( $path )
 
 class Iscra
 {
-    // Db
+    // Database settings
     public $dbHost;
     public $dbName;
     public $dbUser;
     public $dbPassword;
-    public $dbQueueTable;
+    public $dbQueueTable; // Table where parser stores queue
 
     //
-    public $baseUrl;
-    public $startUrl;
-    public $urlsRange;
-    public $parserRegexes;
+    public $baseUrl; // Url to resolve relative paths
+    public $startUrl; // First url to crawl
+    public $urlsRange; // Regexes array defining range of urls to be crawled
+    public $parserRegexes; // Regexes to find data in pages
 
     function __construct(
             $dbHost, $dbName, $dbUser, $dbPassword, $dbQueueTable,
@@ -200,10 +203,11 @@ class Iscra
         $this->parserRegexes = $parserRegexes;
 
         // Setup db
-        require "rb12lg.php";
+        require_once "rb12lg.php"; // We use Redbean ORM
         R::setup("mysql:host=$this->dbHost;dbname=$this->dbName", $this->dbUser, $this->dbPassword);
     }
 
+    // Clear queue
     public function reset()
     {
         $database = R::$adapter;
@@ -211,53 +215,62 @@ class Iscra
         return "Parser reset";
     }
 
+    // Run parser on one item in queue
     public function runOnce()
     {
         // Init queue
         $this->pushToQueue($this->startUrl);
 
-        // Get
+        // Get next item from queue
         $url = $this->popFromQueue();
+        // TODO: What if connection have been broken
         if ($url !== null)
         {
+            // Get page from web
             $html = $this->fetchUrl($url);
+            // Find urls in page
             $this->extractUrls($html);
+            // Extract data from page
             $this->parse($html, 'mapper');
+            // Response
             $curN = count(Finder::where($this->dbQueueTable, "used = 1"));
             $n = count(Finder::where($this->dbQueueTable, ""));
             return "$curN;$n";
         }
         else
         {
+            // No items in queue
             return "END";
         }
     }
 
-    // add url to queue
+    // Add url to queue
     public function pushToQueue($url)
     {
-        // if url is not in queue already
+        // If url is not in queue already
         if (reset(Finder::where($this->dbQueueTable, "url = '$url'")) === FALSE)
         {
             $row = R::dispense($this->dbQueueTable);
             $row->url = $url;
-            $row->used = 0;
+            $row->used = 0; // Url is not crawled yet
             R::store($row);
         }
     }
 
-    // remove first url from queue and return it
+    // Remove first url from queue and return it
     public function popFromQueue()
     {
         $row = reset(Finder::where($this->dbQueueTable, "used = 0"));
         if ($row !== FALSE)
         {
-            $row->used = 1;
+            $row->used = 1; // Now this url won't pop
             R::store($row);
             return $row->url;
         }
         else
+        {
             return null;
+        }
     }
 
     // parse text
@@ -269,6 +282,7 @@ class Iscra
             preg_match_all($this->parserRegexes[$i], $text, $match);
             $matches[$i] = $match;
         }
+        // Dispatch results to user-defined handler
         return $$mapper($matches);
     }
 
@@ -282,6 +296,7 @@ class Iscra
         {
             $url = $this->absoluteUrl($this->baseUrl, $url);
             $inRange = false;
+            // Check if extracted url is in allowed range
             foreach ($this->urlsRange as $urlRange)
             {
                 if (preg_match($urlRange, $url) != 0)
@@ -290,6 +305,7 @@ class Iscra
                     break;
                 }
             }
+            // If url is in range, add it to queue
             if ($inRange)
             {
                 $this->pushToQueue($url);
